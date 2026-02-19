@@ -7,7 +7,7 @@ from .client import YouTubeAPIClient
 from .auth import get_authenticated_service, setup_oauth
 from .data_loader import YouTubeAPIDataLoader, extract_show_name
 from .database import AnalyticsDatabase
-from .models import Video, ChannelStats, DailyAnalytics, VideoAnalytics
+from .models import Video, ChannelStats, DailyAnalytics, VideoAnalytics, ContentType
 
 __all__ = [
     'YouTubeAPIClient',
@@ -20,4 +20,5 @@ __all__ = [
     'ChannelStats',
     'DailyAnalytics',
     'VideoAnalytics',
+    'ContentType',
 ]

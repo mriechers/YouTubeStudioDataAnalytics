@@ -20,9 +20,10 @@ import pytest
 # Add project root to path so 'src' package imports work
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.youtube_api.client import _parse_analytics_response
 from src.youtube_api.data_loader import extract_show_name, YouTubeAPIDataLoader
 from src.youtube_api.database import AnalyticsDatabase
-from src.youtube_api.models import Video, ChannelStats, DailyAnalytics, VideoAnalytics
+from src.youtube_api.models import Video, ChannelStats, DailyAnalytics, VideoAnalytics, ContentType
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +95,96 @@ class TestDataLoaderInterface:
 
     def test_has_load_subscribers_data(self):
         assert hasattr(YouTubeAPIDataLoader, 'load_subscribers_data')
+
+
+# ---------------------------------------------------------------------------
+# Content type classification tests
+# ---------------------------------------------------------------------------
+
+class TestContentTypeClassification:
+    """Tests for the creatorContentType classification pipeline."""
+
+    @patch('src.youtube_api.data_loader.YouTubeAPIClient')
+    def test_classify_updates_content_type(self, mock_client_cls):
+        """classify_content_types maps Analytics API results onto DataFrame."""
+        loader = YouTubeAPIDataLoader.__new__(YouTubeAPIDataLoader)
+        loader.client = mock_client_cls.return_value
+        loader.lookback_days = 90
+
+        # Mock the Analytics API classification response
+        loader.client.get_content_type_classification.return_value = {
+            'vid_001': 'SHORTS',
+            'vid_002': 'VIDEO_ON_DEMAND',
+        }
+
+        loader.videos_df = pd.DataFrame({
+            'video_id': ['vid_001', 'vid_002', 'vid_003'],
+            'content_type': ['UNSPECIFIED', 'UNSPECIFIED', 'UNSPECIFIED'],
+            'is_short': [True, False, True],  # duration heuristic
+        })
+
+        loader.classify_content_types()
+
+        assert loader.videos_df.loc[0, 'content_type'] == 'SHORTS'
+        assert loader.videos_df.loc[1, 'content_type'] == 'VIDEO_ON_DEMAND'
+        # vid_003 not in API results, stays UNSPECIFIED
+        assert loader.videos_df.loc[2, 'content_type'] == 'UNSPECIFIED'
+
+    @patch('src.youtube_api.data_loader.YouTubeAPIClient')
+    def test_classify_updates_is_short(self, mock_client_cls):
+        """is_short is updated based on authoritative content_type."""
+        loader = YouTubeAPIDataLoader.__new__(YouTubeAPIDataLoader)
+        loader.client = mock_client_cls.return_value
+        loader.lookback_days = 90
+
+        loader.client.get_content_type_classification.return_value = {
+            'vid_001': 'VIDEO_ON_DEMAND',  # Override: short duration but VOD
+        }
+
+        loader.videos_df = pd.DataFrame({
+            'video_id': ['vid_001'],
+            'content_type': ['UNSPECIFIED'],
+            'is_short': [True],  # heuristic said Short
+        })
+
+        loader.classify_content_types()
+
+        assert loader.videos_df.loc[0, 'is_short'] == False
+        assert loader.videos_df.loc[0, 'content_type'] == 'VIDEO_ON_DEMAND'
+
+    @patch('src.youtube_api.data_loader.YouTubeAPIClient')
+    def test_classify_handles_api_failure(self, mock_client_cls):
+        """Classification gracefully falls back when API call fails."""
+        loader = YouTubeAPIDataLoader.__new__(YouTubeAPIDataLoader)
+        loader.client = mock_client_cls.return_value
+        loader.lookback_days = 90
+
+        loader.client.get_content_type_classification.side_effect = Exception("quota exceeded")
+
+        loader.videos_df = pd.DataFrame({
+            'video_id': ['vid_001'],
+            'content_type': ['UNSPECIFIED'],
+            'is_short': [True],
+        })
+
+        # Should not raise
+        loader.classify_content_types()
+
+        # Original values preserved
+        assert loader.videos_df.loc[0, 'content_type'] == 'UNSPECIFIED'
+        assert loader.videos_df.loc[0, 'is_short'] == True
+
+    @patch('src.youtube_api.data_loader.YouTubeAPIClient')
+    def test_classify_empty_dataframe(self, mock_client_cls):
+        """classify_content_types is a no-op on empty DataFrame."""
+        loader = YouTubeAPIDataLoader.__new__(YouTubeAPIDataLoader)
+        loader.client = mock_client_cls.return_value
+        loader.lookback_days = 90
+        loader.videos_df = pd.DataFrame()
+
+        # Should not raise or call API
+        loader.classify_content_types()
+        loader.client.get_content_type_classification.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +278,7 @@ class TestAnalyticsDatabase:
             'show_name': 'Test Show',
             'duration_minutes': 5.0,
             'is_short': False,
+            'content_type': 'UNSPECIFIED',
             'views': 1000,
             'likes': 50,
             'comments': 10,
@@ -354,6 +446,23 @@ class TestAnalyticsDatabase:
         assert result['longform']['count'] == 1
         assert result['longform']['total_views'] == 10000
 
+    def test_content_type_persisted(self, db):
+        """content_type column is stored and retrieved."""
+        db.upsert_video(self._make_video('v1', content_type='SHORTS'))
+        db.upsert_video(self._make_video('v2', content_type='VIDEO_ON_DEMAND'))
+
+        results = db.get_all_videos()
+        types = {r['video_id']: r['content_type'] for r in results}
+        assert types['v1'] == 'SHORTS'
+        assert types['v2'] == 'VIDEO_ON_DEMAND'
+
+    def test_content_type_defaults_unspecified(self, db):
+        """Videos without explicit content_type default to UNSPECIFIED."""
+        db.upsert_video(self._make_video('v1'))
+
+        results = db.get_all_videos()
+        assert results[0]['content_type'] == 'UNSPECIFIED'
+
 
 # ---------------------------------------------------------------------------
 # Pydantic model tests
@@ -362,8 +471,8 @@ class TestAnalyticsDatabase:
 class TestPydanticModels:
     """Test Pydantic data model validation and computed fields."""
 
-    def test_video_is_short_true(self):
-        """Videos <= 1.0 minute are Shorts."""
+    def test_video_is_short_duration_heuristic(self):
+        """Videos <= 3.0 minutes are Shorts (duration heuristic, expanded Oct 2024)."""
         v = Video(
             video_id='abc',
             title='Short Clip',
@@ -375,8 +484,34 @@ class TestPydanticModels:
         )
         assert v.is_short is True
 
+    def test_video_is_short_2min_short(self):
+        """2-minute video is a Short under the 3-min threshold."""
+        v = Video(
+            video_id='abc',
+            title='Two Min Short',
+            published_at=datetime.now(),
+            channel_id='UC_test',
+            channel_title='Test',
+            duration_minutes=2.0,
+            duration_iso='PT2M',
+        )
+        assert v.is_short is True
+
+    def test_video_is_short_3min_boundary(self):
+        """Exactly 3.0 minutes is still a Short (boundary case)."""
+        v = Video(
+            video_id='abc',
+            title='3 Min Short',
+            published_at=datetime.now(),
+            channel_id='UC_test',
+            channel_title='Test',
+            duration_minutes=3.0,
+            duration_iso='PT3M',
+        )
+        assert v.is_short is True
+
     def test_video_is_short_false(self):
-        """Videos > 1.0 minute are not Shorts."""
+        """Videos > 3.0 minutes are not Shorts."""
         v = Video(
             video_id='abc',
             title='Long Video',
@@ -387,6 +522,48 @@ class TestPydanticModels:
             duration_iso='PT10M',
         )
         assert v.is_short is False
+
+    def test_content_type_overrides_duration(self):
+        """When content_type is set, it overrides duration heuristic."""
+        # 10 min video classified as SHORTS by Analytics API
+        v = Video(
+            video_id='abc',
+            title='Long But Actually Short',
+            published_at=datetime.now(),
+            channel_id='UC_test',
+            channel_title='Test',
+            duration_minutes=10.0,
+            duration_iso='PT10M',
+            content_type=ContentType.SHORTS,
+        )
+        assert v.is_short is True
+
+    def test_content_type_vod_not_short(self):
+        """VIDEO_ON_DEMAND content_type means not a Short, even if short duration."""
+        v = Video(
+            video_id='abc',
+            title='Short VOD',
+            published_at=datetime.now(),
+            channel_id='UC_test',
+            channel_title='Test',
+            duration_minutes=0.5,
+            duration_iso='PT30S',
+            content_type=ContentType.VIDEO_ON_DEMAND,
+        )
+        assert v.is_short is False
+
+    def test_content_type_defaults_to_unspecified(self):
+        """Videos default to UNSPECIFIED content_type."""
+        v = Video(
+            video_id='abc',
+            title='Default',
+            published_at=datetime.now(),
+            channel_id='UC_test',
+            channel_title='Test',
+            duration_minutes=5.0,
+            duration_iso='PT5M',
+        )
+        assert v.content_type == ContentType.UNSPECIFIED
 
     def test_video_show_name_standard(self):
         """Video model extracts show name from standard title."""
@@ -470,5 +647,245 @@ class TestPydanticModels:
         """VideoAnalytics defaults numeric fields to 0."""
         va = VideoAnalytics(video_id='abc')
         assert va.views == 0
+        assert va.engaged_views is None
         assert va.watch_time_minutes == 0.0
         assert va.subscribers_gained == 0
+
+    def test_daily_analytics_engaged_views(self):
+        """DailyAnalytics supports engaged_views metric."""
+        d = DailyAnalytics(
+            date=datetime.now(),
+            views=1000,
+            engaged_views=800,
+        )
+        assert d.engaged_views == 800
+
+    def test_daily_analytics_engaged_views_optional(self):
+        """engaged_views is None when not provided (pre-March 2025 data)."""
+        d = DailyAnalytics(
+            date=datetime.now(),
+            views=1000,
+        )
+        assert d.engaged_views is None
+
+
+# ---------------------------------------------------------------------------
+# Database engagedViews tests
+# ---------------------------------------------------------------------------
+
+class TestDatabaseEngagedViews:
+    """Tests for engaged_views and view_count_methodology in database."""
+
+    @pytest.fixture
+    def db(self, tmp_path):
+        db_path = tmp_path / "test_analytics.db"
+        return AnalyticsDatabase(db_path=db_path)
+
+    def test_daily_stats_engaged_views(self, db):
+        """engaged_views column persists in daily_stats."""
+        from src.youtube_api.database import DailyStatsTable
+
+        date = datetime(2025, 4, 1)
+        db.add_daily_stats('vid_001', date, {
+            'views': 1000,
+            'engaged_views': 800,
+            'watch_time_minutes': 50.0,
+        })
+
+        with db.get_session() as session:
+            row = session.query(DailyStatsTable).filter_by(video_id='vid_001').first()
+            assert row.engaged_views == 800
+
+    def test_daily_stats_engaged_views_null(self, db):
+        """engaged_views is NULL for pre-March 2025 data."""
+        from src.youtube_api.database import DailyStatsTable
+
+        date = datetime(2024, 12, 1)
+        db.add_daily_stats('vid_001', date, {
+            'views': 1000,
+            'watch_time_minutes': 50.0,
+        })
+
+        with db.get_session() as session:
+            row = session.query(DailyStatsTable).filter_by(video_id='vid_001').first()
+            assert row.engaged_views is None
+
+    def test_view_count_methodology(self, db):
+        """view_count_methodology column persists in videos table."""
+        video = {
+            'video_id': 'v1',
+            'title': 'Test | Show',
+            'published_at': datetime(2025, 4, 1),
+            'channel_id': 'UC_test',
+            'channel_title': 'Test',
+            'show_name': 'Show',
+            'duration_minutes': 5.0,
+            'is_short': False,
+            'content_type': 'VIDEO_ON_DEMAND',
+            'view_count_methodology': 'new_no_min_watch',
+            'views': 500,
+        }
+        db.upsert_video(video)
+
+        results = db.get_all_videos()
+        assert results[0]['view_count_methodology'] == 'new_no_min_watch'
+
+
+# ---------------------------------------------------------------------------
+# Analytics API response parsing tests
+# ---------------------------------------------------------------------------
+
+class TestParseAnalyticsResponse:
+    """Tests for _parse_analytics_response helper."""
+
+    def test_parses_with_engaged_views(self):
+        """Full response with engagedViews is parsed correctly."""
+        response = {
+            'columnHeaders': [
+                {'name': 'day'},
+                {'name': 'views'},
+                {'name': 'engagedViews'},
+                {'name': 'estimatedMinutesWatched'},
+            ],
+            'rows': [
+                ['2025-04-01', 1000, 800, 50.5],
+                ['2025-04-02', 1200, 950, 60.0],
+            ]
+        }
+        parsed = _parse_analytics_response(response)
+
+        assert len(parsed) == 2
+        assert parsed[0]['day'] == '2025-04-01'
+        assert parsed[0]['views'] == 1000
+        assert parsed[0]['engagedViews'] == 800
+        assert parsed[1]['estimatedMinutesWatched'] == 60.0
+
+    def test_parses_without_engaged_views(self):
+        """Pre-March 2025 response that omits engagedViews column."""
+        response = {
+            'columnHeaders': [
+                {'name': 'day'},
+                {'name': 'views'},
+                {'name': 'estimatedMinutesWatched'},
+            ],
+            'rows': [
+                ['2024-12-01', 500, 25.0],
+            ]
+        }
+        parsed = _parse_analytics_response(response)
+
+        assert len(parsed) == 1
+        assert parsed[0]['views'] == 500
+        assert 'engagedViews' not in parsed[0]
+        # estimatedMinutesWatched is NOT shifted to wrong position
+        assert parsed[0]['estimatedMinutesWatched'] == 25.0
+
+    def test_empty_response(self):
+        """Empty response returns empty list."""
+        response = {'columnHeaders': [], 'rows': []}
+        assert _parse_analytics_response(response) == []
+
+    def test_no_rows(self):
+        """Response with headers but no rows."""
+        response = {
+            'columnHeaders': [{'name': 'day'}, {'name': 'views'}],
+        }
+        assert _parse_analytics_response(response) == []
+
+
+# ---------------------------------------------------------------------------
+# Database migration tests
+# ---------------------------------------------------------------------------
+
+class TestDatabaseMigration:
+    """Tests for backward-compatible schema migrations."""
+
+    def test_migration_adds_missing_columns(self, tmp_path):
+        """Opening a pre-existing DB adds content_type, view_count_methodology, engaged_views."""
+        from sqlalchemy import create_engine, text
+
+        db_path = tmp_path / "legacy.db"
+
+        # Create a legacy schema WITHOUT the new columns
+        legacy_engine = create_engine(f'sqlite:///{db_path}')
+        with legacy_engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE videos (
+                    video_id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    published_at DATETIME NOT NULL,
+                    channel_id TEXT NOT NULL,
+                    channel_title TEXT,
+                    show_name TEXT,
+                    duration_minutes REAL,
+                    is_short BOOLEAN DEFAULT 0,
+                    views INTEGER DEFAULT 0,
+                    likes INTEGER DEFAULT 0,
+                    comments INTEGER DEFAULT 0,
+                    engagement_rate REAL DEFAULT 0.0,
+                    views_per_day REAL DEFAULT 0.0,
+                    days_since_publication INTEGER DEFAULT 0,
+                    last_updated DATETIME
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE daily_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    video_id TEXT NOT NULL,
+                    date DATETIME NOT NULL,
+                    views INTEGER DEFAULT 0,
+                    likes INTEGER DEFAULT 0,
+                    comments INTEGER DEFAULT 0,
+                    watch_time_minutes REAL DEFAULT 0.0,
+                    subscribers_gained INTEGER DEFAULT 0
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE channel_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel_id TEXT NOT NULL,
+                    date DATETIME NOT NULL,
+                    subscriber_count INTEGER DEFAULT 0,
+                    video_count INTEGER DEFAULT 0,
+                    view_count INTEGER DEFAULT 0,
+                    daily_views INTEGER DEFAULT 0,
+                    daily_watch_time_minutes REAL DEFAULT 0.0,
+                    daily_subscribers_gained INTEGER DEFAULT 0,
+                    daily_subscribers_lost INTEGER DEFAULT 0
+                )
+            """))
+            conn.commit()
+        legacy_engine.dispose()
+
+        # Now open with AnalyticsDatabase — migration should add columns
+        db = AnalyticsDatabase(db_path=db_path)
+
+        # Verify we can write and read with the new columns
+        db.upsert_video({
+            'video_id': 'v1',
+            'title': 'Test | Show',
+            'published_at': datetime(2025, 1, 1),
+            'channel_id': 'UC_test',
+            'channel_title': 'Test',
+            'show_name': 'Show',
+            'duration_minutes': 5.0,
+            'is_short': False,
+            'content_type': 'VIDEO_ON_DEMAND',
+            'view_count_methodology': 'new_no_min_watch',
+            'views': 100,
+        })
+
+        results = db.get_all_videos()
+        assert results[0]['content_type'] == 'VIDEO_ON_DEMAND'
+        assert results[0]['view_count_methodology'] == 'new_no_min_watch'
+
+        # Verify engaged_views works in daily_stats
+        db.add_daily_stats('v1', datetime(2025, 4, 1), {
+            'views': 50,
+            'engaged_views': 40,
+        })
+        from src.youtube_api.database import DailyStatsTable
+        with db.get_session() as session:
+            row = session.query(DailyStatsTable).first()
+            assert row.engaged_views == 40
