@@ -1,9 +1,38 @@
-function App() {
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import Layout from "./components/Layout";
+import Overview from "./pages/Overview";
+import Shows from "./pages/Shows";
+import Shorts from "./pages/Shorts";
+import Archival from "./pages/Archival";
+import Subscribers from "./pages/Subscribers";
+import { useSSE } from "./hooks/useSSE";
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 5 * 60 * 1000 } },
+});
+
+function AppInner() {
+  useSSE();
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 flex items-center justify-center">
-      <h1 className="text-4xl font-bold">PBS Wisconsin YouTube Analytics</h1>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Overview />} />
+          <Route path="shows" element={<Shows />} />
+          <Route path="shorts" element={<Shorts />} />
+          <Route path="archival" element={<Archival />} />
+          <Route path="subscribers" element={<Subscribers />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppInner />
+    </QueryClientProvider>
+  );
+}
