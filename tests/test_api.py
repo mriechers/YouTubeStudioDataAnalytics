@@ -62,3 +62,46 @@ class TestVideosEndpoints:
     def test_video_detail_not_found(self):
         response = client.get("/api/v1/videos/nonexistent_id")
         assert response.status_code == 404
+
+
+class TestAnalyticsEndpoints:
+    def test_shows_returns_array(self):
+        response = client.get("/api/v1/analytics/shows")
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+
+    def test_shorts_returns_comparison(self):
+        response = client.get("/api/v1/analytics/shorts")
+        assert response.status_code == 200
+        data = response.json()
+        assert "shorts" in data
+        assert "longform" in data
+
+    def test_archival_returns_array(self):
+        response = client.get("/api/v1/analytics/archival")
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+
+    def test_archival_accepts_months_param(self):
+        response = client.get("/api/v1/analytics/archival?months=24")
+        assert response.status_code == 200
+
+    def test_overview_returns_kpis(self):
+        response = client.get("/api/v1/analytics/overview")
+        assert response.status_code == 200
+        data = response.json()
+        assert "total_videos" in data
+
+    def test_timeseries_returns_array(self):
+        response = client.get("/api/v1/analytics/timeseries")
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+
+
+class TestDataEndpoints:
+    def test_data_status_returns_structure(self):
+        response = client.get("/api/v1/data/status")
+        assert response.status_code == 200
+        data = response.json()
+        assert "video_count" in data
+        assert "database_path" in data
