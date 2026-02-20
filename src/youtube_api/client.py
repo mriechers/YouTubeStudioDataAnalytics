@@ -42,6 +42,23 @@ def parse_duration(duration_str: str) -> float:
     return hours * 60 + minutes + seconds / 60
 
 
+def _parse_analytics_response(response: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Parse a YouTube Analytics API response using columnHeaders for safety.
+
+    The Analytics API may omit metrics (e.g., engagedViews for pre-March 2025
+    date ranges). Parsing by column name instead of positional index prevents
+    silent data misalignment.
+
+    Returns:
+        List of dicts, one per row, keyed by column name.
+    """
+    headers = [h['name'] for h in response.get('columnHeaders', [])]
+    rows = []
+    for row in response.get('rows', []):
+        rows.append(dict(zip(headers, row)))
+    return rows
+
+
 class YouTubeAPIClient:
     """
     Client for interacting with YouTube Data API v3 and YouTube Analytics API.
@@ -205,8 +222,11 @@ class YouTubeAPIClient:
                 'views': int(item['statistics'].get('viewCount', 0)),
                 'likes': int(item['statistics'].get('likeCount', 0)),
                 'comments': int(item['statistics'].get('commentCount', 0)),
-                # Shorts are typically <= 60 seconds
-                'is_short': duration_minutes <= 1.0,
+                # Duration heuristic: <= 3 min (expanded from 60s in Oct 2024).
+                # Authoritative classification comes from Analytics API
+                # creatorContentType dimension (see classify_content_types).
+                'is_short': duration_minutes <= 3.0,
+                'content_type': 'UNSPECIFIED',
             }
             videos.append(video)
 
@@ -238,30 +258,34 @@ class YouTubeAPIClient:
             ids='channel==MINE',
             startDate=start_date,
             endDate=end_date,
-            metrics='views,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost',
+            metrics='views,engagedViews,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost',
             dimensions='video',
             filters=f'video=={video_id}'
         )
         response = request.execute()
 
-        if not response.get('rows'):
+        parsed = _parse_analytics_response(response)
+
+        if not parsed:
             return {
                 'video_id': video_id,
                 'views': 0,
+                'engaged_views': None,
                 'watch_time_minutes': 0,
                 'avg_view_duration_seconds': 0,
                 'subscribers_gained': 0,
                 'subscribers_lost': 0
             }
 
-        row = response['rows'][0]
+        row = parsed[0]
         return {
-            'video_id': row[0],
-            'views': int(row[1]),
-            'watch_time_minutes': float(row[2]),
-            'avg_view_duration_seconds': float(row[3]),
-            'subscribers_gained': int(row[4]),
-            'subscribers_lost': int(row[5])
+            'video_id': row.get('video', video_id),
+            'views': int(row.get('views', 0)),
+            'engaged_views': int(row['engagedViews']) if row.get('engagedViews') is not None else None,
+            'watch_time_minutes': float(row.get('estimatedMinutesWatched', 0)),
+            'avg_view_duration_seconds': float(row.get('averageViewDuration', 0)),
+            'subscribers_gained': int(row.get('subscribersGained', 0)),
+            'subscribers_lost': int(row.get('subscribersLost', 0))
         }
 
     def get_channel_analytics(
@@ -290,20 +314,22 @@ class YouTubeAPIClient:
             ids='channel==MINE',
             startDate=start_date,
             endDate=end_date,
-            metrics='views,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost',
+            metrics='views,engagedViews,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost',
             dimensions=dimensions
         )
         response = request.execute()
+        parsed = _parse_analytics_response(response)
 
         results = []
-        for row in response.get('rows', []):
+        for row in parsed:
             results.append({
-                'date': row[0],
-                'views': int(row[1]),
-                'watch_time_minutes': float(row[2]),
-                'avg_view_duration_seconds': float(row[3]),
-                'subscribers_gained': int(row[4]),
-                'subscribers_lost': int(row[5])
+                'date': row.get('day') or row.get('month', ''),
+                'views': int(row.get('views', 0)),
+                'engaged_views': int(row['engagedViews']) if row.get('engagedViews') is not None else None,
+                'watch_time_minutes': float(row.get('estimatedMinutesWatched', 0)),
+                'avg_view_duration_seconds': float(row.get('averageViewDuration', 0)),
+                'subscribers_gained': int(row.get('subscribersGained', 0)),
+                'subscribers_lost': int(row.get('subscribersLost', 0))
             })
 
         return results
@@ -353,6 +379,48 @@ class YouTubeAPIClient:
             })
 
         return results
+
+    def get_content_type_classification(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> Dict[str, str]:
+        """
+        Classify videos by content type using the Analytics API creatorContentType dimension.
+
+        This is the authoritative source for Shorts vs. longform classification.
+        The Data API has no isShort flag (Google Issue Tracker #232112727).
+
+        Args:
+            start_date: Start date (YYYY-MM-DD)
+            end_date: End date (YYYY-MM-DD)
+
+        Returns:
+            Dict mapping video_id -> content_type string
+            (SHORTS, VIDEO_ON_DEMAND, LIVE_STREAM, STORY)
+        """
+        if not end_date:
+            end_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+
+        request = self.analytics.reports().query(
+            ids='channel==MINE',
+            startDate=start_date,
+            endDate=end_date,
+            metrics='views',
+            dimensions='video,creatorContentType'
+        )
+        response = request.execute()
+
+        classification = {}
+        for row in response.get('rows', []):
+            video_id = row[0]
+            content_type = row[1]
+            classification[video_id] = content_type
+
+        logger.info(f"Classified {len(classification)} videos by content type")
+        return classification
 
     def get_subscriber_sources(
         self,

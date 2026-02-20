@@ -107,7 +107,12 @@ class YouTubeAPIDataLoader:
 
         # Add PBS-specific fields
         self.videos_df['Show Name'] = self.videos_df['Title'].apply(extract_show_name)
+
+        # Classify content types via Analytics API (authoritative)
+        self.classify_content_types()
+
         self.videos_df['Is Short'] = self.videos_df['is_short']
+        self.videos_df['Content Type'] = self.videos_df['content_type']
 
         logger.info("Videos data preprocessing completed")
         return self.videos_df
@@ -138,7 +143,8 @@ class YouTubeAPIDataLoader:
             self.subscribers_df = self.subscribers_df.rename(columns={
                 'date': 'Date',
                 'subscribers_gained': 'Subscribers Gained',
-                'subscribers_lost': 'Subscribers Lost'
+                'subscribers_lost': 'Subscribers Lost',
+                'engaged_views': 'Engaged Views',
             })
 
             # Parse dates
@@ -209,6 +215,60 @@ class YouTubeAPIDataLoader:
         # Handle any infinite or NaN values
         self.subscribers_df = self.subscribers_df.replace([np.inf, -np.inf], np.nan)
         self.subscribers_df = self.subscribers_df.fillna(0)
+
+    def classify_content_types(self) -> None:
+        """Enrich videos DataFrame with authoritative content type from Analytics API.
+
+        Queries the creatorContentType dimension and updates the content_type
+        and is_short columns. Videos not found in Analytics API results keep
+        their duration-based heuristic classification.
+        """
+        if self.videos_df is None or self.videos_df.empty:
+            return
+
+        try:
+            end_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+            start_date = (
+                datetime.now() - timedelta(days=self.lookback_days)
+            ).strftime('%Y-%m-%d')
+
+            classification = self.client.get_content_type_classification(
+                start_date=start_date,
+                end_date=end_date
+            )
+
+            if not classification:
+                logger.warning("No content type classification data returned")
+                return
+
+            # Map classifications onto DataFrame
+            self.videos_df['content_type'] = self.videos_df['video_id'].map(
+                classification
+            ).fillna('UNSPECIFIED')
+
+            # Update is_short based on authoritative classification
+            classified_mask = self.videos_df['content_type'] != 'UNSPECIFIED'
+            self.videos_df.loc[classified_mask, 'is_short'] = (
+                self.videos_df.loc[classified_mask, 'content_type'] == 'SHORTS'
+            )
+
+            classified_count = classified_mask.sum()
+            total_count = len(self.videos_df)
+            unclassified_count = total_count - classified_count
+            logger.info(
+                f"Classified {classified_count}/{total_count} videos "
+                f"via Analytics API creatorContentType"
+            )
+            if unclassified_count > 0:
+                logger.info(
+                    f"{unclassified_count} videos outside analytics window "
+                    f"({self.lookback_days} days) — using duration heuristic"
+                )
+
+        except Exception as e:
+            logger.warning(
+                f"Content type classification failed, using duration heuristic: {e}"
+            )
 
     def load_all_data(self) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
         """

@@ -4,8 +4,22 @@ Provides type safety and validation for API responses.
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import Optional, List
 from pydantic import BaseModel, Field, computed_field
+
+
+class ContentType(str, Enum):
+    """YouTube content type classification.
+
+    Authoritative source: Analytics API creatorContentType dimension.
+    Fallback: duration-based heuristic.
+    """
+    SHORTS = "SHORTS"
+    VIDEO_ON_DEMAND = "VIDEO_ON_DEMAND"
+    LIVE_STREAM = "LIVE_STREAM"
+    STORY = "STORY"
+    UNSPECIFIED = "UNSPECIFIED"
 
 
 class Video(BaseModel):
@@ -24,12 +38,19 @@ class Video(BaseModel):
     views: int = 0
     likes: int = 0
     comments: int = 0
+    content_type: ContentType = ContentType.UNSPECIFIED
 
     @computed_field
     @property
     def is_short(self) -> bool:
-        """Videos <= 60 seconds are Shorts."""
-        return self.duration_minutes <= 1.0
+        """Determine if video is a Short.
+
+        Uses content_type if classified by Analytics API, otherwise falls back
+        to duration heuristic (<= 3 minutes, expanded from 60s in Oct 2024).
+        """
+        if self.content_type != ContentType.UNSPECIFIED:
+            return self.content_type == ContentType.SHORTS
+        return self.duration_minutes <= 3.0
 
     @computed_field
     @property
@@ -84,6 +105,7 @@ class DailyAnalytics(BaseModel):
     """Model for daily channel analytics."""
     date: datetime
     views: int = 0
+    engaged_views: Optional[int] = None
     watch_time_minutes: float = 0.0
     avg_view_duration_seconds: float = 0.0
     subscribers_gained: int = 0
@@ -100,6 +122,7 @@ class VideoAnalytics(BaseModel):
     """Model for per-video analytics."""
     video_id: str
     views: int = 0
+    engaged_views: Optional[int] = None
     watch_time_minutes: float = 0.0
     avg_view_duration_seconds: float = 0.0
     subscribers_gained: int = 0
@@ -139,6 +162,8 @@ class VideoRecord(BaseModel):
     show_name: str
     duration_minutes: float
     is_short: bool
+    content_type: str = ContentType.UNSPECIFIED.value
+    view_count_methodology: str = "legacy"
     views: int = 0
     likes: int = 0
     comments: int = 0
@@ -153,6 +178,7 @@ class DailyStatsRecord(BaseModel):
     video_id: str
     date: datetime
     views: int = 0
+    engaged_views: Optional[int] = None
     likes: int = 0
     comments: int = 0
     watch_time_minutes: float = 0.0

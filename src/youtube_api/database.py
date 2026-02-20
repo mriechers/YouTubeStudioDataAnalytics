@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, Index
+from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, Index, text, inspect
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from sqlalchemy.sql import func
 
@@ -33,6 +33,8 @@ class VideoTable(Base):
     show_name = Column(String)
     duration_minutes = Column(Float)
     is_short = Column(Boolean, default=False)
+    content_type = Column(String, default='UNSPECIFIED')
+    view_count_methodology = Column(String, default='legacy')
     views = Column(Integer, default=0)
     likes = Column(Integer, default=0)
     comments = Column(Integer, default=0)
@@ -47,6 +49,7 @@ class VideoTable(Base):
         Index('idx_videos_show', 'show_name'),
         Index('idx_videos_published', 'published_at'),
         Index('idx_videos_is_short', 'is_short'),
+        Index('idx_videos_content_type', 'content_type'),
     )
 
 
@@ -58,6 +61,7 @@ class DailyStatsTable(Base):
     video_id = Column(String, nullable=False)
     date = Column(DateTime, nullable=False)
     views = Column(Integer, default=0)
+    engaged_views = Column(Integer, nullable=True)
     likes = Column(Integer, default=0)
     comments = Column(Integer, default=0)
     watch_time_minutes = Column(Float, default=0.0)
@@ -110,7 +114,37 @@ class AnalyticsDatabase:
 
         # Create tables if they don't exist
         Base.metadata.create_all(self.engine)
+
+        # Migrate existing tables (add columns that may be missing)
+        self._migrate_schema()
+
         logger.info(f"Database initialized at {self.db_path}")
+
+    def _migrate_schema(self) -> None:
+        """Add columns introduced after initial schema creation.
+
+        SQLAlchemy's create_all() only creates new tables — it does not alter
+        existing ones. This method handles backward-compatible ALTER TABLE
+        additions for existing SQLite databases.
+        """
+        migrations = [
+            ('videos', 'content_type', "TEXT DEFAULT 'UNSPECIFIED'"),
+            ('videos', 'view_count_methodology', "TEXT DEFAULT 'legacy'"),
+            ('daily_stats', 'engaged_views', 'INTEGER'),
+        ]
+
+        with self.engine.connect() as conn:
+            inspector = inspect(self.engine)
+            for table_name, column_name, col_type in migrations:
+                existing_cols = {
+                    c['name'] for c in inspector.get_columns(table_name)
+                }
+                if column_name not in existing_cols:
+                    conn.execute(text(
+                        f'ALTER TABLE {table_name} ADD COLUMN {column_name} {col_type}'
+                    ))
+                    conn.commit()
+                    logger.info(f"Migrated: added {column_name} to {table_name}")
 
     def get_session(self) -> Session:
         """Get a new database session."""
