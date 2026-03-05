@@ -23,6 +23,20 @@ try:
 except ImportError:
     API_AVAILABLE = False
 
+
+def _load_channels_config():
+    """Load channel list from config/channels.yaml."""
+    channels_path = Path("config/channels.yaml")
+    if not channels_path.exists():
+        return []
+    try:
+        import yaml
+        with open(channels_path) as f:
+            config = yaml.safe_load(f)
+        return config.get('channels', []) or []
+    except Exception:
+        return []
+
 # Optional PBS Wisconsin panels
 try:
     from dashboards.panels import (
@@ -115,6 +129,20 @@ class StreamlitDashboard:
                 else:
                     st.warning("Not authenticated — run `python -m src.youtube_api.auth`")
 
+                # Channel selector
+                channels = _load_channels_config()
+                channel_id = None
+                if channels:
+                    channel_names = [ch['name'] for ch in channels]
+                    selected_name = st.selectbox(
+                        "Channel", channel_names,
+                        help="Select which channel to analyze"
+                    )
+                    selected = next(
+                        ch for ch in channels if ch['name'] == selected_name
+                    )
+                    channel_id = selected['id']
+
                 lookback_days = st.slider(
                     "Lookback days", min_value=30, max_value=720,
                     value=540, step=30,
@@ -159,6 +187,7 @@ class StreamlitDashboard:
                 'use_sample_data': use_sample_data,
                 'use_api': use_api,
                 'lookback_days': lookback_days,
+                'channel_id': channel_id if use_api else None,
             }
     
     def initialize_analytics(self, config):
@@ -166,12 +195,21 @@ class StreamlitDashboard:
         try:
             if config.get('use_api'):
                 # YouTube API path — cache in session_state to avoid re-fetching
+                # Invalidate cache if channel changed
+                cached_channel = st.session_state.get('api_channel_id')
+                current_channel = config.get('channel_id')
+                if cached_channel != current_channel:
+                    st.session_state.pop('api_loader', None)
+                    st.session_state.pop('api_analytics', None)
+
                 if 'api_loader' not in st.session_state:
                     with st.spinner("Fetching data from YouTube API..."):
                         api_loader = YouTubeAPIDataLoader(
+                            channel_id=current_channel,
                             lookback_days=config['lookback_days']
                         )
                         st.session_state['api_loader'] = api_loader
+                        st.session_state['api_channel_id'] = current_channel
                 else:
                     api_loader = st.session_state['api_loader']
 

@@ -96,8 +96,10 @@ class YouTubeAPIDataLoader:
             'duration_minutes': 'Duration (minutes)'
         })
 
-        # Parse dates
-        self.videos_df['Publish Date'] = pd.to_datetime(self.videos_df['Publish Date'])
+        # Parse dates (strip timezone to match CSV loader's tz-naive format)
+        self.videos_df['Publish Date'] = pd.to_datetime(
+            self.videos_df['Publish Date'], utc=True
+        ).dt.tz_localize(None)
 
         # Sort by date
         self.videos_df = self.videos_df.sort_values('Publish Date')

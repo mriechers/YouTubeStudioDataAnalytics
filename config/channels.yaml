@@ -2,19 +2,13 @@
 # Add your channel IDs here after OAuth setup
 
 channels:
-  # Main PBS Wisconsin channel
-  # - id: "UCxxxxxxxxxx"
-  #   name: "PBS Wisconsin"
-  #   type: "main"
+  - id: "UCtnFS8kY2D3VLaEtt_Jk2ZA"
+    name: "PBS Wisconsin"
+    type: "main"
 
-  # Example sub-brand channels (uncomment and fill in IDs)
-  # - id: "UCyyyyyyyyyy"
-  #   name: "PBS Wisconsin Kids"
-  #   type: "kids"
-
-  # - id: "UCzzzzzzzzzz"
-  #   name: "PBS Wisconsin News"
-  #   type: "news"
+  - id: "UC9hv0yH0UirvKjtD0xXEomg"
+    name: "PBS Wisconsin Education"
+    type: "education"
 
 # Default settings
 defaults:

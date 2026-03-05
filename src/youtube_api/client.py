@@ -143,7 +143,7 @@ class YouTubeAPIClient:
     def get_all_videos(
         self,
         channel_id: Optional[str] = None,
-        max_results: int = 500
+        max_results: int = 10000
     ) -> List[Dict[str, Any]]:
         """
         Get all videos from a channel.

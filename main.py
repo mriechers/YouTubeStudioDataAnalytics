@@ -46,6 +46,52 @@ try:
 except ImportError:
     API_AVAILABLE = False
 
+
+def load_channels_config():
+    """Load channel configuration from config/channels.yaml."""
+    channels_path = project_root / 'config' / 'channels.yaml'
+    if not channels_path.exists():
+        return []
+    try:
+        import yaml
+        with open(channels_path) as f:
+            config = yaml.safe_load(f)
+        return config.get('channels', []) or []
+    except Exception as e:
+        logger.warning(f"Could not load channels config: {e}")
+        return []
+
+
+def get_channel_id(channel_name=None):
+    """
+    Get a channel ID from channels.yaml.
+
+    Args:
+        channel_name: Channel name or type to look up. If None, returns the
+                      first 'main' channel, or the first channel listed.
+
+    Returns:
+        Channel ID string, or None if no channels configured.
+    """
+    channels = load_channels_config()
+    if not channels:
+        return None
+
+    if channel_name:
+        # Match by name (case-insensitive) or type
+        for ch in channels:
+            if (ch.get('name', '').lower() == channel_name.lower() or
+                    ch.get('type', '').lower() == channel_name.lower()):
+                return ch['id']
+        logger.warning(f"Channel '{channel_name}' not found in config")
+        return None
+
+    # Default: first 'main' channel, or first channel
+    for ch in channels:
+        if ch.get('type') == 'main':
+            return ch['id']
+    return channels[0]['id']
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -54,7 +100,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def run_complete_analysis(config_path=None, output_dir="data/exports",
-                          use_api=False, lookback_days=540):
+                          use_api=False, lookback_days=540, channel=None):
     """
     Run the complete analytics pipeline.
 
@@ -63,6 +109,7 @@ def run_complete_analysis(config_path=None, output_dir="data/exports",
         output_dir: Directory to save results
         use_api: Use YouTube API instead of CSV files
         lookback_days: Days of data to fetch when using API
+        channel: Channel name or type from channels.yaml
     """
     print("🚀 Starting YouTube Analytics Pipeline...")
 
@@ -75,7 +122,10 @@ def run_complete_analysis(config_path=None, output_dir="data/exports",
             if not API_AVAILABLE:
                 print("❌ YouTube API module not available. Install google-api-python-client.")
                 return None
-            api_loader = YouTubeAPIDataLoader(lookback_days=lookback_days)
+            channel_id = get_channel_id(channel)
+            api_loader = YouTubeAPIDataLoader(
+                channel_id=channel_id, lookback_days=lookback_days
+            )
             analytics = YouTubeAnalytics(
                 config=config.to_dict(),
                 data_loader=api_loader
@@ -130,7 +180,8 @@ def run_dash_dashboard():
         logger.error(f"Error starting Dash dashboard: {e}")
         print(f"❌ Dashboard failed to start: {e}")
 
-def run_data_analysis_only(config_path=None, use_api=False, lookback_days=540):
+def run_data_analysis_only(config_path=None, use_api=False, lookback_days=540,
+                           channel=None):
     """
     Run only data analysis without ML or export.
 
@@ -138,6 +189,7 @@ def run_data_analysis_only(config_path=None, use_api=False, lookback_days=540):
         config_path: Path to configuration file
         use_api: Use YouTube API instead of CSV files
         lookback_days: Days of data to fetch when using API
+        channel: Channel name or type from channels.yaml
     """
     print("🔍 Running Data Analysis Only...")
 
@@ -150,7 +202,10 @@ def run_data_analysis_only(config_path=None, use_api=False, lookback_days=540):
             if not API_AVAILABLE:
                 print("❌ YouTube API module not available. Install google-api-python-client.")
                 return None
-            api_loader = YouTubeAPIDataLoader(lookback_days=lookback_days)
+            channel_id = get_channel_id(channel)
+            api_loader = YouTubeAPIDataLoader(
+                channel_id=channel_id, lookback_days=lookback_days
+            )
             analytics = YouTubeAnalytics(data_loader=api_loader)
         else:
             analytics = YouTubeAnalytics(
@@ -174,7 +229,8 @@ def run_data_analysis_only(config_path=None, use_api=False, lookback_days=540):
         print(f"❌ Data analysis failed: {e}")
         return None
 
-def run_ml_prediction_demo(config_path=None, use_api=False, lookback_days=540):
+def run_ml_prediction_demo(config_path=None, use_api=False, lookback_days=540,
+                           channel=None):
     """
     Run ML prediction demonstration.
 
@@ -182,6 +238,7 @@ def run_ml_prediction_demo(config_path=None, use_api=False, lookback_days=540):
         config_path: Path to configuration file
         use_api: Use YouTube API instead of CSV files
         lookback_days: Days of data to fetch when using API
+        channel: Channel name or type from channels.yaml
     """
     print("🤖 Running ML Prediction Demo...")
 
@@ -194,7 +251,10 @@ def run_ml_prediction_demo(config_path=None, use_api=False, lookback_days=540):
             if not API_AVAILABLE:
                 print("❌ YouTube API module not available. Install google-api-python-client.")
                 return None
-            api_loader = YouTubeAPIDataLoader(lookback_days=lookback_days)
+            channel_id = get_channel_id(channel)
+            api_loader = YouTubeAPIDataLoader(
+                channel_id=channel_id, lookback_days=lookback_days
+            )
             analytics = YouTubeAnalytics(data_loader=api_loader)
         else:
             analytics = YouTubeAnalytics(
@@ -268,6 +328,8 @@ Examples:
                        help='Use YouTube API instead of CSV files')
     parser.add_argument('--lookback-days', type=int, default=540,
                        help='Days of data to fetch from API (default: 540)')
+    parser.add_argument('--channel', type=str, default=None,
+                       help='Channel name or type from channels.yaml (default: main channel)')
 
     # Configuration options
     parser.add_argument('--config', type=str,
@@ -288,17 +350,20 @@ Examples:
     # Execute based on arguments
     if args.analysis:
         run_complete_analysis(args.config, args.output,
-                              use_api=args.api, lookback_days=args.lookback_days)
+                              use_api=args.api, lookback_days=args.lookback_days,
+                              channel=args.channel)
     elif args.streamlit:
         run_streamlit_dashboard()
     elif args.dash:
         run_dash_dashboard()
     elif args.data_only:
         run_data_analysis_only(args.config,
-                               use_api=args.api, lookback_days=args.lookback_days)
+                               use_api=args.api, lookback_days=args.lookback_days,
+                               channel=args.channel)
     elif args.ml_demo:
         run_ml_prediction_demo(args.config,
-                               use_api=args.api, lookback_days=args.lookback_days)
+                               use_api=args.api, lookback_days=args.lookback_days,
+                               channel=args.channel)
     else:
         # Default: show help and run interactive mode
         parser.print_help()
