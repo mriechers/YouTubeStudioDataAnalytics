@@ -151,7 +151,8 @@ export default function Hits() {
     return {
       tooltip: {
         trigger: "item" as const,
-        formatter: (params: { data: { name: string; value: number[] } }) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        formatter: (params: any) =>
           `${truncate(params.data.name, 40)}<br/>Views: ${formatNumber(params.data.value[0])}<br/>Eng: ${params.data.value[1].toFixed(2)}%`,
       },
       xAxis: {
