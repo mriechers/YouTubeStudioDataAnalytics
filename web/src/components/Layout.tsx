@@ -1,5 +1,4 @@
 import { NavLink, Outlet } from "react-router-dom";
-import ChannelSelector from "./ChannelSelector";
 
 const NAV_ITEMS = [
   { to: "/", label: "Overview" },
@@ -14,9 +13,6 @@ export default function Layout() {
     <div className="flex h-screen bg-gray-950 text-gray-100">
       <nav className="flex w-56 flex-col border-r border-gray-800 bg-gray-900 p-4">
         <h1 className="mb-6 text-lg font-bold text-white">PBS Wisconsin</h1>
-        <div className="mb-4">
-          <ChannelSelector />
-        </div>
         <ul className="space-y-1">
           {NAV_ITEMS.map(({ to, label }) => (
             <li key={to}>

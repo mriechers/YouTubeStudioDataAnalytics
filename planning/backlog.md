@@ -12,12 +12,6 @@ Session scratchpad for tracking work items. Items here should be promoted to Git
 - [ ] Update dashboard UI to show API connection status
 - [ ] Add OAuth token refresh handling in dashboard
 
-### Advanced Analytics: Retention & Matrix
-- [ ] **Retention stickiness (APV)**: Track Average Percentage Viewed across all content.
-- [ ] **Shorts Feed Health**: Implement Viewed vs. Swiped Ratio tracking.
-- [ ] **CTR vs AVD Matrix**: Quadrant visualization for thumbnail vs. content optimization.
-- [ ] **Audience Loyalty**: New vs. Returning viewer metrics over time.
-
 ### PBS-Specific Dashboard Panels
 - [ ] **Shorts → Longform Conversion Panel**: Track which Shorts drive views to longform content
 - [ ] **Archival Content Performance Panel**: Surface older videos gaining new traction

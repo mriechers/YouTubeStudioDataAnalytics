@@ -1,10 +1,7 @@
 import KpiCard from "../components/KpiCard";
 import KpiRow from "../components/KpiRow";
 import BaseChart from "../components/BaseChart";
-import EmptyState from "../components/EmptyState";
-import ChartSummary from "../components/ChartSummary";
-import MatrixChart from "../components/MatrixChart";
-import { useOverview, useTimeseries, useMatrix } from "../hooks/useAnalytics";
+import { useOverview, useTimeseries } from "../hooks/useAnalytics";
 
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -15,9 +12,8 @@ function formatNumber(n: number): string {
 export default function Overview() {
   const { data: kpis, isLoading: kpisLoading } = useOverview();
   const { data: timeseries, isLoading: tsLoading } = useTimeseries(90);
-  const { data: matrixVideos, isLoading: matrixLoading } = useMatrix();
 
-  if (kpisLoading) return <EmptyState message="Loading overview..." />;
+  if (kpisLoading) return <p className="text-gray-400">Loading...</p>;
 
   const chartOption = {
     tooltip: { trigger: "axis" as const },
@@ -58,37 +54,14 @@ export default function Overview() {
           value={`${(kpis?.avg_engagement ?? 0).toFixed(2)}%`}
         />
       </KpiRow>
-
-      <div className="grid grid-cols-1 gap-6">
-        <div className="rounded-lg bg-gray-900 p-4 shadow-sm border border-gray-100">
-          <h3 className="mb-2 text-sm font-medium text-gray-400 uppercase tracking-wider">
-            Channel Growth Momentum
-          </h3>
-          {tsLoading ? (
-            <EmptyState message="Loading chart..." />
-          ) : (
-            <>
-              <ChartSummary>
-                Daily views and subscriber gains (90 days).
-              </ChartSummary>
-              <BaseChart
-                option={chartOption}
-                height="350px"
-                ariaLabel="Line chart showing daily views and subscriber gains"
-              />
-            </>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <h3 className="mb-4 text-sm font-medium text-gray-500 uppercase tracking-wider">
-          Performance Optimization (CTR vs. Retention)
+      <div className="rounded-lg bg-gray-900 p-4">
+        <h3 className="mb-2 text-sm font-medium text-gray-400">
+          Daily Views & Subscribers (90 days)
         </h3>
-        {matrixLoading ? (
-          <EmptyState message="Loading matrix..." />
+        {tsLoading ? (
+          <p className="text-gray-500">Loading chart...</p>
         ) : (
-          <MatrixChart videos={matrixVideos ?? []} />
+          <BaseChart option={chartOption} height="350px" />
         )}
       </div>
     </div>

@@ -1,20 +1,17 @@
 import KpiCard from "../components/KpiCard";
 import KpiRow from "../components/KpiRow";
 import BaseChart from "../components/BaseChart";
-import EmptyState from "../components/EmptyState";
-import ChartSummary from "../components/ChartSummary";
 import { useSubscribers } from "../hooks/useAnalytics";
 
 export default function Subscribers() {
   const { data: sources, isLoading } = useSubscribers();
 
-  if (isLoading) return <EmptyState message="Loading subscriber data..." />;
+  if (isLoading) return <p className="text-gray-400">Loading...</p>;
   if (!sources?.length)
     return (
-      <EmptyState
-        message="Subscriber attribution data is not available."
-        suggestion="Requires YouTube Analytics API access with the yt-analytics.readonly scope."
-      />
+      <p className="text-gray-400">
+        Subscriber attribution data is not available. Requires YouTube Analytics API access.
+      </p>
     );
 
   const totalGained = sources.reduce(
@@ -63,14 +60,7 @@ export default function Subscribers() {
         <h3 className="mb-2 text-sm font-medium text-gray-400">
           Top 10 Videos by Subscriber Gain
         </h3>
-        <ChartSummary>
-          Net subscriber change attributed to each of the top 10 videos over a 90-day rolling window.
-        </ChartSummary>
-        <BaseChart
-          option={barOption}
-          height="400px"
-          ariaLabel="Bar chart showing net subscriber change attributed to the top 10 videos over a 90-day window"
-        />
+        <BaseChart option={barOption} height="400px" />
       </div>
       <p className="text-xs text-gray-500">
         Subscriber attribution is based on a 90-day rolling window from the YouTube Analytics API.
