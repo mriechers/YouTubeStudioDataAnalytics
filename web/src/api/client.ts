@@ -67,6 +67,105 @@ export interface DataStatus {
   database_path: string;
 }
 
+// --- Insight Dashboard Types ---
+
+export interface HealthKPIs {
+  subscriber_count: number;
+  avg_daily_views: number;
+  total_watch_time_hours: number;
+  avg_view_duration_seconds: number;
+  views_trend_pct?: number;
+  watch_time_trend_pct?: number;
+  subscribers_trend_pct?: number;
+}
+
+export interface ContentVelocity {
+  new_uploads: number;
+  avg_views_at_7d?: number;
+  avg_views_at_30d?: number;
+  catalog_view_pct: number;
+  new_content_view_pct: number;
+}
+
+export interface HealthData {
+  kpis: HealthKPIs;
+  timeseries: TimeseriesPoint[];
+  velocity: ContentVelocity;
+  publishing_cadence: Array<{ week: string; count: number }>;
+  watch_time_by_format: Array<Record<string, unknown>>;
+}
+
+export interface VideoWithContext {
+  video_id: string;
+  title: string;
+  published_at?: string;
+  show_name?: string;
+  is_short?: boolean;
+  views: number;
+  likes: number;
+  comments: number;
+  engagement_rate?: number;
+  views_per_day?: number;
+  days_since_publication?: number;
+  z_score: number;
+  vs_show_multiplier: number;
+  show_avg_vpd: number;
+  subscribers_gained?: number;
+}
+
+export interface ShowHitRate {
+  show_name: string;
+  video_count: number;
+  hit_count: number;
+  hit_rate: number;
+}
+
+export interface HitsData {
+  hit_count: number;
+  avg_hit_multiplier: number;
+  top_sub_driver?: string;
+  best_show_hit_rate?: string;
+  top_performers: VideoWithContext[];
+  show_hit_rates: ShowHitRate[];
+  subscriber_drivers: Array<Record<string, unknown>>;
+}
+
+export interface ShowVariance {
+  show_name: string;
+  video_count: number;
+  avg_views_per_day: number;
+  coeff_of_variation: number;
+  hit_count: number;
+  hit_rate: number;
+}
+
+export interface FormatGapShow {
+  show_name: string;
+  video_count: number;
+  total_views?: number;
+  avg_engagement?: number;
+  avg_views_per_day?: number;
+  channel_avg_views_per_day?: number;
+  ratio?: number;
+}
+
+export interface OpportunitiesData {
+  inconsistent_shows: ShowVariance[];
+  catalog_risers: Array<Record<string, unknown>>;
+  no_shorts: FormatGapShow[];
+  underperforming: FormatGapShow[];
+}
+
+export interface RecentData {
+  videos: VideoWithContext[];
+  summary: {
+    count: number;
+    total_views: number;
+    avg_views_per_day: number;
+    avg_engagement: number;
+  };
+}
+
 export const api = {
   getChannels: () => fetchJson<ChannelConfig[]>("/channels"),
   getVideos: (channelId?: string) =>
@@ -85,4 +184,12 @@ export const api = {
   getDataStatus: () => fetchJson<DataStatus>("/data/status"),
   triggerRefresh: () =>
     fetch(`${BASE}/data/refresh`, { method: "POST" }).then((r) => r.json()),
+  getHealth: (days = 90) =>
+    fetchJson<HealthData>(`/analytics/health?days=${days}`),
+  getHits: (days = 90) =>
+    fetchJson<HitsData>(`/analytics/hits?days=${days}`),
+  getOpportunities: () =>
+    fetchJson<OpportunitiesData>("/analytics/opportunities"),
+  getRecent: (days = 30) =>
+    fetchJson<RecentData>(`/analytics/recent?days=${days}`),
 };

@@ -33,3 +33,27 @@ export const useVideos = (channelId?: string) =>
 
 export const useDataStatus = () =>
   useQuery({ queryKey: ["dataStatus"], queryFn: api.getDataStatus });
+
+export const useHealth = (days = 90) =>
+  useQuery({
+    queryKey: ["health", days],
+    queryFn: () => api.getHealth(days),
+  });
+
+export const useHits = (days = 90) =>
+  useQuery({
+    queryKey: ["hits", days],
+    queryFn: () => api.getHits(days),
+  });
+
+export const useOpportunities = () =>
+  useQuery({
+    queryKey: ["opportunities"],
+    queryFn: () => api.getOpportunities(),
+  });
+
+export const useRecent = (days = 30) =>
+  useQuery({
+    queryKey: ["recent", days],
+    queryFn: () => api.getRecent(days),
+  });

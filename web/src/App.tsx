@@ -1,11 +1,10 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Layout from "./components/Layout";
-import Overview from "./pages/Overview";
-import Shows from "./pages/Shows";
-import Shorts from "./pages/Shorts";
-import Archival from "./pages/Archival";
-import Subscribers from "./pages/Subscribers";
+import Health from "./pages/Health";
+import Hits from "./pages/Hits";
+import Opportunities from "./pages/Opportunities";
+import Recent from "./pages/Recent";
 import { useSSE } from "./hooks/useSSE";
 
 const queryClient = new QueryClient({
@@ -18,11 +17,10 @@ function AppInner() {
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
-          <Route index element={<Overview />} />
-          <Route path="shows" element={<Shows />} />
-          <Route path="shorts" element={<Shorts />} />
-          <Route path="archival" element={<Archival />} />
-          <Route path="subscribers" element={<Subscribers />} />
+          <Route index element={<Health />} />
+          <Route path="hits" element={<Hits />} />
+          <Route path="opportunities" element={<Opportunities />} />
+          <Route path="recent" element={<Recent />} />
         </Route>
       </Routes>
     </BrowserRouter>
