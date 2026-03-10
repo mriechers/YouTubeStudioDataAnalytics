@@ -11,34 +11,9 @@ import pandas as pd
 import numpy as np
 
 from .client import YouTubeAPIClient
+from .show_parser import extract_show_name, normalize_show_name  # noqa: F401
 
 logger = logging.getLogger(__name__)
-
-
-def extract_show_name(title: str) -> str:
-    """
-    Extract show name from video title using PBS Wisconsin naming conventions.
-
-    Pattern: "Video Title | SHOW NAME"
-    Exception: "Wisconsin Life | Video Title" (reversed)
-
-    Args:
-        title: Video title string
-
-    Returns:
-        Show name or 'Uncategorized'
-    """
-    if " | " not in title:
-        return "Uncategorized"
-
-    parts = title.split(" | ")
-
-    # Wisconsin Life is reversed: "Wisconsin Life | Video Title"
-    if parts[0].strip() == "Wisconsin Life":
-        return "Wisconsin Life"
-
-    # Standard format: "Video Title | SHOW NAME"
-    return parts[-1].strip()
 
 
 class YouTubeAPIDataLoader:

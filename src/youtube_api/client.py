@@ -258,7 +258,7 @@ class YouTubeAPIClient:
             ids='channel==MINE',
             startDate=start_date,
             endDate=end_date,
-            metrics='views,engagedViews,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost',
+            metrics='views,engagedViews,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,impressionClickThroughRate,viewedPercentage,subscribersGained,subscribersLost',
             dimensions='video',
             filters=f'video=={video_id}'
         )
@@ -273,6 +273,9 @@ class YouTubeAPIClient:
                 'engaged_views': None,
                 'watch_time_minutes': 0,
                 'avg_view_duration_seconds': 0,
+                'avg_view_percentage': 0,
+                'ctr': 0,
+                'viewed_vs_swiped_pct': 0,
                 'subscribers_gained': 0,
                 'subscribers_lost': 0
             }
@@ -284,6 +287,9 @@ class YouTubeAPIClient:
             'engaged_views': int(row['engagedViews']) if row.get('engagedViews') is not None else None,
             'watch_time_minutes': float(row.get('estimatedMinutesWatched', 0)),
             'avg_view_duration_seconds': float(row.get('averageViewDuration', 0)),
+            'avg_view_percentage': float(row.get('averageViewPercentage', 0)),
+            'ctr': float(row.get('impressionClickThroughRate', 0)),
+            'viewed_vs_swiped_pct': float(row.get('viewedPercentage', 0)),
             'subscribers_gained': int(row.get('subscribersGained', 0)),
             'subscribers_lost': int(row.get('subscribersLost', 0))
         }
@@ -314,7 +320,7 @@ class YouTubeAPIClient:
             ids='channel==MINE',
             startDate=start_date,
             endDate=end_date,
-            metrics='views,engagedViews,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost',
+            metrics='views,engagedViews,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,impressionClickThroughRate,viewedPercentage,subscribersGained,subscribersLost',
             dimensions=dimensions
         )
         response = request.execute()
@@ -328,6 +334,9 @@ class YouTubeAPIClient:
                 'engaged_views': int(row['engagedViews']) if row.get('engagedViews') is not None else None,
                 'watch_time_minutes': float(row.get('estimatedMinutesWatched', 0)),
                 'avg_view_duration_seconds': float(row.get('averageViewDuration', 0)),
+                'avg_view_percentage': float(row.get('averageViewPercentage', 0)),
+                'ctr': float(row.get('impressionClickThroughRate', 0)),
+                'viewed_vs_swiped_pct': float(row.get('viewedPercentage', 0)),
                 'subscribers_gained': int(row.get('subscribersGained', 0)),
                 'subscribers_lost': int(row.get('subscribersLost', 0))
             })
@@ -460,6 +469,45 @@ class YouTubeAPIClient:
                 'subscribers_gained': int(row[1]),
                 'subscribers_lost': int(row[2]),
                 'net_subscribers': int(row[1]) - int(row[2])
+            })
+
+        return results
+
+    def get_audience_loyalty(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get subscribed vs. unsubscribed views.
+
+        Args:
+            start_date: Start date
+            end_date: End date
+
+        Returns:
+            List of daily loyalty data
+        """
+        if not end_date:
+            end_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+
+        request = self.analytics.reports().query(
+            ids='channel==MINE',
+            startDate=start_date,
+            endDate=end_date,
+            metrics='views',
+            dimensions='day,subscribedStatus'
+        )
+        response = request.execute()
+
+        results = []
+        for row in response.get('rows', []):
+            results.append({
+                'date': row[0],
+                'viewer_type': row[1],
+                'views': int(row[2])
             })
 
         return results

@@ -56,16 +56,8 @@ class Video(BaseModel):
     @property
     def show_name(self) -> str:
         """Extract show name from title using PBS Wisconsin conventions."""
-        if " | " not in self.title:
-            return "Uncategorized"
-
-        parts = self.title.split(" | ")
-
-        # Wisconsin Life is reversed
-        if parts[0].strip() == "Wisconsin Life":
-            return "Wisconsin Life"
-
-        return parts[-1].strip()
+        from .show_parser import extract_show_name
+        return extract_show_name(self.title)
 
     @computed_field
     @property

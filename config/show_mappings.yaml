@@ -1,0 +1,45 @@
+# Show Name Mappings
+#
+# Maps variant show names to their canonical form.
+# Applied after the title parser extracts a raw show name.
+#
+# Format:
+#   "Variant Name": "Canonical Name"
+#
+# Rules applied automatically (no config needed):
+#   - "WPT " prefix is stripped before lookup
+#   - Case-insensitive matching
+
+mappings:
+  # --- Here & Now variants ---
+  "Here and Now": "Here & Now"
+  "Here and Now Archive": "Here & Now"
+  "Here and Now - Capitol Advice": "Here & Now"
+  "Here and Now -  Public Employee Union Contracts": "Here & Now"
+  "Here and Now - Sen. Jon Erpenbach interview": "Here & Now"
+  "Here and Now - UW System Tuition": "Here & Now"
+  "Here and Now - Wisconsin Unemployment Benefits": "Here & Now"
+  "Here and Now Retrospect": "Here & Now"
+
+  # --- Sewing With Nancy ---
+  "Sewing with Nancy": "Sewing With Nancy"
+  "Sewing WIth Nancy": "Sewing With Nancy"
+
+  # --- Quick Fit ---
+  "Quick Fit with Cassy": "Quick Fit With Cassy"
+  "Quick Fit wIth Cassy": "Quick Fit With Cassy"
+
+  # --- University Place ---
+  "Univesity Place": "University Place"
+
+  # --- Other capitalisation fixes ---
+  "Meet The Lab": "Meet the Lab"
+  "Educator Connection Live!": "Educator Connection LIVE!"
+
+  # --- Wisconsin Gardener ---
+  "The Wisconsin Gardener": "Wisconsin Gardener"
+
+  # --- Merge smaller series ---
+  "In Wisconsin": "In Wisconsin"
+  "Behind the Scenes": "Behind the Scenes"
+  "Director's Cut Sneak Peek": "Director's Cut"

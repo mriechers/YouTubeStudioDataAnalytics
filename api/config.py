@@ -9,8 +9,8 @@ PROJECT_ROOT = Path(__file__).parent.parent
 
 # Paths
 DATABASE_PATH = PROJECT_ROOT / "data" / "youtube_analytics.db"
-CREDENTIALS_PATH = PROJECT_ROOT / "credentials" / "credentials.json"
-TOKEN_PATH = PROJECT_ROOT / "credentials" / "token.json"
+CREDENTIALS_PATH = PROJECT_ROOT / "credentials" / "work" / "credentials.json"
+TOKEN_PATH = PROJECT_ROOT / "credentials" / "work" / "token-analytics.json"
 CHANNELS_CONFIG_PATH = PROJECT_ROOT / "config" / "channels.yaml"
 
 

@@ -6,8 +6,8 @@ Custom fork of YouTubeStudioDataAnalytics that replaces CSV-based workflows with
 
 ## Technical Stack
 
-- **Language**: Python 3.9+
-- **Frameworks**: Streamlit (dashboards), Pandas (data analysis)
+- **Language**: Python 3.9+ (analytics), TypeScript (MCP server)
+- **Frameworks**: Streamlit (dashboards), Pandas (data analysis), FastMCP (MCP server)
 - **APIs**: YouTube Data API v3, YouTube Analytics API
 - **Storage**: SQLite (historical data), macOS Keychain (OAuth tokens)
 - **Data Models**: Pydantic for validation and serialization
@@ -18,6 +18,8 @@ Custom fork of YouTubeStudioDataAnalytics that replaces CSV-based workflows with
 - **Run**: `python main.py --streamlit` (interactive dashboard)
 - **Test**: `pytest tests/` (when tests are implemented)
 - **Virtual Environment**: `source venv/bin/activate`
+- **MCP Server Build**: `cd mcp-server && npm run build`
+- **MCP Token Generation**: `python scripts/generate_youtube_token.py work|personal|both`
 
 ## Available MCP Servers
 
@@ -62,7 +64,7 @@ python main.py --streamlit
 4. Go to **Credentials > Create Credentials > OAuth Client ID**
 5. Select **Desktop application**
 6. Download the JSON credentials
-7. Save as `credentials/credentials.json`
+7. Save as `credentials/work/credentials.json`
 
 ### 2. OAuth Authentication
 
@@ -71,7 +73,7 @@ source venv/bin/activate
 python -m src.youtube_api.auth
 ```
 
-This opens a browser for Google OAuth consent. After approval, tokens are saved to `credentials/token.json`.
+This opens a browser for Google OAuth consent. After approval, tokens are saved to `credentials/work/token-analytics.json`.
 
 ### 3. Configure Channels
 
@@ -163,29 +165,54 @@ python main.py --data-only
 
 ```
 pbswi-youtube-analytics/
-├── credentials/          # OAuth tokens (git-ignored)
-│   ├── credentials.json  # From Google Cloud Console
-│   └── token.json        # Generated after OAuth
+├── credentials/              # OAuth tokens (git-ignored)
+│   ├── personal/             # Personal Google account
+│   │   ├── credentials.json  # OAuth client
+│   │   └── token.json        # MCP read-write token
+│   └── work/                 # PBS Wisconsin account
+│       ├── credentials.json  # OAuth client
+│       ├── token.json        # MCP read-write token
+│       └── token-analytics.json # Python analytics read-only token
+├── mcp-server/               # YouTube MCP server (TypeScript)
+│   ├── src/
+│   │   ├── auth.ts           # Google OAuth2 + service account auth
+│   │   ├── server.ts         # FastMCP server with 16 YouTube tools
+│   │   └── types.ts          # Zod parameter schemas
+│   ├── index.js              # Entry point
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── Dockerfile            # Multi-stage Node.js build
+├── scripts/                  # Shared utility scripts
+│   └── generate_youtube_token.py  # MCP OAuth token generator
 ├── config/
-│   └── channels.yaml     # Channel configuration
+│   └── channels.yaml         # Channel configuration
 ├── data/
 │   └── youtube_analytics.db  # SQLite database
-├── planning/             # Session tracking and backlog
-│   ├── README.md         # Current state and quick links
-│   ├── progress.md       # Session handoff log
-│   └── backlog.md        # Session scratchpad (items → GitHub Issues)
+├── planning/                 # Session tracking and backlog
+│   ├── README.md             # Current state and quick links
+│   ├── progress.md           # Session handoff log
+│   └── backlog.md            # Session scratchpad (items → GitHub Issues)
 ├── src/
-│   ├── youtube_api/      # YouTube API integration
-│   │   ├── auth.py       # OAuth flow
-│   │   ├── client.py     # API client
-│   │   ├── data_loader.py # DataFrame loader
-│   │   ├── database.py   # SQLite persistence
-│   │   └── models.py     # Pydantic models
-│   ├── analytics/        # Core analytics (original)
-│   ├── dashboards/       # Streamlit/Dash apps
-│   └── utils/            # Utilities
-└── main.py               # Entry point
+│   ├── youtube_api/          # YouTube API integration (Python)
+│   │   ├── auth.py           # OAuth flow (read-only scopes)
+│   │   ├── client.py         # API client
+│   │   ├── data_loader.py    # DataFrame loader
+│   │   ├── database.py       # SQLite persistence
+│   │   └── models.py         # Pydantic models
+│   ├── analytics/            # Core analytics (original)
+│   ├── dashboards/           # Streamlit/Dash apps
+│   └── utils/                # Utilities
+└── main.py                   # Entry point
 ```
+
+### Credential Layout
+
+The analytics Python code and the MCP TypeScript server share the same `credentials/` directory but use **separate tokens** because they request different OAuth scopes:
+
+- **Python analytics**: read-only (`youtube.readonly`, `yt-analytics.readonly`) → `token-analytics.json`
+- **MCP server**: read-write (`youtube`, `youtube.force-ssl`, `youtube.upload`) → `token.json`
+
+The `credentials.json` (OAuth client identity) is shared per account.
 
 ## Secrets Management
 

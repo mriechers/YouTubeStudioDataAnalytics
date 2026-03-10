@@ -4,6 +4,8 @@ import KpiCard from "../components/KpiCard";
 import KpiRow from "../components/KpiRow";
 import BaseChart from "../components/BaseChart";
 import DataTable from "../components/DataTable";
+import EmptyState from "../components/EmptyState";
+import ChartSummary from "../components/ChartSummary";
 import { useArchival } from "../hooks/useAnalytics";
 import type { VideoSummary } from "../api/client";
 
@@ -34,12 +36,13 @@ export default function Archival() {
   const [months, setMonths] = useState(12);
   const { data: videos, isLoading } = useArchival(months);
 
-  if (isLoading) return <p className="text-gray-400">Loading...</p>;
+  if (isLoading) return <EmptyState message="Loading archival data..." />;
   if (!videos?.length)
     return (
-      <p className="text-gray-400">
-        No archival videos found older than {months} months.
-      </p>
+      <EmptyState
+        message={`No archival videos found older than ${months} months.`}
+        suggestion="Try reducing the age threshold using the slider above."
+      />
     );
 
   const sorted = [...videos].sort((a, b) => b.views_per_day - a.views_per_day);
@@ -105,11 +108,25 @@ export default function Archival() {
       </KpiRow>
       <div className="rounded-lg bg-gray-900 p-4">
         <h3 className="mb-2 text-sm font-medium text-gray-400">Age vs Daily Velocity</h3>
-        <BaseChart option={scatterOption} height="400px" />
+        <ChartSummary>
+          Each dot is a video older than {months} months. Higher on the Y axis means more daily views — these are your evergreen performers.
+        </ChartSummary>
+        <BaseChart
+          option={scatterOption}
+          height="400px"
+          ariaLabel="Scatter chart showing archival video age in months versus daily view velocity, identifying evergreen content"
+        />
       </div>
       <div className="rounded-lg bg-gray-900 p-4">
         <h3 className="mb-2 text-sm font-medium text-gray-400">Top 10 by Daily Velocity</h3>
-        <BaseChart option={barOption} height="400px" />
+        <ChartSummary>
+          The 10 archival videos currently earning the most daily views — strong candidates for promotion or updates.
+        </ChartSummary>
+        <BaseChart
+          option={barOption}
+          height="400px"
+          ariaLabel="Horizontal bar chart showing the top 10 archival videos ranked by daily view velocity"
+        />
       </div>
       <div>
         <h3 className="mb-2 text-sm font-medium text-gray-400">Top 20 Archival Videos</h3>

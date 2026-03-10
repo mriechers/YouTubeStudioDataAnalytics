@@ -74,8 +74,17 @@ class TestAnalyticsEndpoints:
         response = client.get("/api/v1/analytics/shorts")
         assert response.status_code == 200
         data = response.json()
-        assert "shorts" in data
-        assert "longform" in data
+        assert "kpis" in data
+        assert "comparison" in data
+        assert "shorts" in data["comparison"]
+        assert "longform" in data["comparison"]
+        assert "videos" in data
+        assert "timeseries" in data
+
+    def test_matrix_returns_array(self):
+        response = client.get("/api/v1/analytics/matrix")
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
 
     def test_archival_returns_array(self):
         response = client.get("/api/v1/analytics/archival")

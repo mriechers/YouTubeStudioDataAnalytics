@@ -20,3 +20,4 @@ services:
       - "3001:80"
     depends_on:
       - api
+

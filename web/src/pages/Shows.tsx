@@ -1,6 +1,8 @@
 import { createColumnHelper } from "@tanstack/react-table";
 import BaseChart from "../components/BaseChart";
 import DataTable from "../components/DataTable";
+import EmptyState from "../components/EmptyState";
+import ChartSummary from "../components/ChartSummary";
 import { useShows } from "../hooks/useAnalytics";
 import type { ShowSummary } from "../api/client";
 
@@ -27,9 +29,14 @@ const columns = [
 export default function Shows() {
   const { data: shows, isLoading } = useShows();
 
-  if (isLoading) return <p className="text-gray-400">Loading...</p>;
+  if (isLoading) return <EmptyState message="Loading show data..." />;
   if (!shows?.length)
-    return <p className="text-gray-400">No show data available.</p>;
+    return (
+      <EmptyState
+        message="No show data available."
+        suggestion="Show names are parsed from video titles using the pipe separator pattern."
+      />
+    );
 
   const sorted = [...shows].sort((a, b) => b.total_views - a.total_views);
 
@@ -68,11 +75,25 @@ export default function Shows() {
       <h2 className="text-xl font-bold">Show Breakdown</h2>
       <div className="rounded-lg bg-gray-900 p-4">
         <h3 className="mb-2 text-sm font-medium text-gray-400">Views by Show</h3>
-        <BaseChart option={barOption} height={`${Math.max(400, sorted.length * 30)}px`} />
+        <ChartSummary>
+          Total cumulative views per show, sorted highest to lowest. Longer bars indicate higher overall reach.
+        </ChartSummary>
+        <BaseChart
+          option={barOption}
+          height={`${Math.max(400, sorted.length * 30)}px`}
+          ariaLabel="Horizontal bar chart showing total views by show, sorted from highest to lowest"
+        />
       </div>
       <div className="rounded-lg bg-gray-900 p-4">
         <h3 className="mb-2 text-sm font-medium text-gray-400">Catalog Size by Show</h3>
-        <BaseChart option={treemapOption} height="450px" />
+        <ChartSummary>
+          Treemap showing relative catalog size (video count) per show. Larger tiles indicate more published videos.
+        </ChartSummary>
+        <BaseChart
+          option={treemapOption}
+          height="450px"
+          ariaLabel="Treemap chart showing catalog size by show, where tile area represents video count"
+        />
       </div>
       <div>
         <h3 className="mb-2 text-sm font-medium text-gray-400">All Show Metrics</h3>

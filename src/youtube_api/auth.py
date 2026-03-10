@@ -23,8 +23,10 @@ SCOPES = [
 ]
 
 # Default paths
-DEFAULT_CREDENTIALS_PATH = Path(__file__).parent.parent.parent / 'credentials' / 'credentials.json'
-DEFAULT_TOKEN_PATH = Path(__file__).parent.parent.parent / 'credentials' / 'token.json'
+CREDENTIALS_ROOT = Path(__file__).parent.parent.parent / 'credentials'
+DEFAULT_ACCOUNT = 'work'
+DEFAULT_CREDENTIALS_PATH = CREDENTIALS_ROOT / DEFAULT_ACCOUNT / 'credentials.json'
+DEFAULT_TOKEN_PATH = CREDENTIALS_ROOT / DEFAULT_ACCOUNT / 'token-analytics.json'
 
 
 def get_credentials(
@@ -43,6 +45,11 @@ def get_credentials(
     Returns:
         Valid Credentials object
     """
+    if credentials_path and isinstance(credentials_path, str):
+        credentials_path = Path(credentials_path)
+    if token_path and isinstance(token_path, str):
+        token_path = Path(token_path)
+
     credentials_path = credentials_path or DEFAULT_CREDENTIALS_PATH
     token_path = token_path or DEFAULT_TOKEN_PATH
     scopes = scopes or SCOPES

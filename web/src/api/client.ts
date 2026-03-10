@@ -24,6 +24,9 @@ export interface VideoSummary {
   likes: number;
   comments: number;
   engagement_rate: number;
+  avg_view_pct?: number;
+  ctr?: number;
+  viewed_vs_swiped_pct?: number;
   views_per_day: number;
   days_since_publication: number;
 }
@@ -42,6 +45,41 @@ export interface ShortsComparison {
   longform: Record<string, number>;
 }
 
+export interface ShortsDetailVideo {
+  video_id: string;
+  title: string;
+  published_at?: string;
+  show_name?: string;
+  views: number;
+  likes: number;
+  comments: number;
+  engagement_rate?: number;
+  avg_view_pct?: number;
+  ctr?: number;
+  viewed_vs_swiped_pct?: number;
+  views_per_day?: number;
+  days_since_publication?: number;
+  sparkline?: number[];
+}
+
+export interface ShortsOverviewKPIs {
+  count: number;
+  total_views: number;
+  total_engaged_views?: number;
+  avg_views: number;
+  avg_engagement: number;
+  avg_views_per_day: number;
+  viewed_vs_swiped_pct?: number;
+  channel_avg_views: number;
+}
+
+export interface ShortsFullResponse {
+  kpis: ShortsOverviewKPIs;
+  comparison: ShortsComparison;
+  videos: ShortsDetailVideo[];
+  timeseries: TimeseriesPoint[];
+}
+
 export interface OverviewKPIs {
   total_videos: number;
   total_views: number;
@@ -57,8 +95,26 @@ export interface TimeseriesPoint {
   views: number;
   engaged_views: number | null;
   watch_time_minutes: number;
+  avg_view_pct?: number;
+  ctr?: number;
+  viewed_vs_swiped_pct?: number;
   subscribers_gained: number;
   subscribers_lost: number;
+}
+
+export interface AudienceLoyaltyPoint {
+  date: string;
+  new_views: number;
+  returning_views: number;
+}
+
+export interface AudienceLoyaltyResponse {
+  timeseries: AudienceLoyaltyPoint[];
+  summary: {
+    total_new: number;
+    total_returning: number;
+    loyalty_ratio: number;
+  };
 }
 
 export interface DataStatus {
@@ -67,20 +123,44 @@ export interface DataStatus {
   database_path: string;
 }
 
+function channelParam(channelId?: string): string {
+  return channelId ? `channel_id=${channelId}` : "";
+}
+
+function qs(...params: string[]): string {
+  const filtered = params.filter(Boolean);
+  return filtered.length ? `?${filtered.join("&")}` : "";
+}
+
 export const api = {
   getChannels: () => fetchJson<ChannelConfig[]>("/channels"),
   getVideos: (channelId?: string) =>
-    fetchJson<VideoSummary[]>(
-      channelId ? `/videos?channel_id=${channelId}` : "/videos"
-    ),
+    fetchJson<VideoSummary[]>(`/videos${qs(channelParam(channelId))}`),
   getVideo: (id: string) => fetchJson<VideoSummary>(`/videos/${id}`),
-  getOverview: () => fetchJson<OverviewKPIs>("/analytics/overview"),
-  getTimeseries: (days = 90) =>
-    fetchJson<TimeseriesPoint[]>(`/analytics/timeseries?days=${days}`),
-  getShows: () => fetchJson<ShowSummary[]>("/analytics/shows"),
-  getShorts: () => fetchJson<ShortsComparison>("/analytics/shorts"),
-  getArchival: (months = 12) =>
-    fetchJson<VideoSummary[]>(`/analytics/archival?months=${months}`),
+  getOverview: (channelId?: string) =>
+    fetchJson<OverviewKPIs>(`/analytics/overview${qs(channelParam(channelId))}`),
+  getTimeseries: (days = 90, channelId?: string) =>
+    fetchJson<TimeseriesPoint[]>(
+      `/analytics/timeseries${qs(`days=${days}`, channelParam(channelId))}`
+    ),
+  getShows: (channelId?: string) =>
+    fetchJson<ShowSummary[]>(`/analytics/shows${qs(channelParam(channelId))}`),
+  getShorts: (days = 90, channelId?: string) =>
+    fetchJson<ShortsFullResponse>(
+      `/analytics/shorts${qs(`days=${days}`, channelParam(channelId))}`
+    ),
+  getMatrix: (channelId?: string) =>
+    fetchJson<VideoSummary[]>(`/analytics/matrix${qs(channelParam(channelId))}`),
+  getLoyalty: (days = 30) =>
+    fetchJson<AudienceLoyaltyResponse>(`/analytics/loyalty${qs(`days=${days}`)}`),
+  getVideoDailyStats: (videoId: string, days = 30) =>
+    fetchJson<TimeseriesPoint[]>(
+      `/analytics/videos/${videoId}/daily${qs(`days=${days}`)}`
+    ),
+  getArchival: (months = 12, channelId?: string) =>
+    fetchJson<VideoSummary[]>(
+      `/analytics/archival${qs(`months=${months}`, channelParam(channelId))}`
+    ),
   getSubscribers: () => fetchJson<Record<string, unknown>[]>("/analytics/subscribers"),
   getDataStatus: () => fetchJson<DataStatus>("/data/status"),
   triggerRefresh: () =>
